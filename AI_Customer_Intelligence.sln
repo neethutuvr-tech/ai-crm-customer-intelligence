@@ -4,9 +4,9 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Crm.Api", "src\Crm.Api\Crm.Api.csproj", "{A73C1E58-5C5F-4BA7-B3C6-9B2A5E2F4AC1}"
 EndProject
-Project("{66A26720-8FB5-11D2-AA7E-00C04F688DDE}") = "CRM API", "CRM API", "{F42E23FC-8B19-4F89-9A6A-217A9C226D68}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "CRM API", "CRM API", "{F42E23FC-8B19-4F89-9A6A-217A9C226D68}"
 EndProject
-Project("{66A26720-8FB5-11D2-AA7E-00C04F688DDE}") = "Python AI and RAG", "Python AI and RAG", "{24655921-6B80-4CFB-8D38-35BBACD71BC2}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Python AI and RAG", "Python AI and RAG", "{24655921-6B80-4CFB-8D38-35BBACD71BC2}"
 	ProjectSection(SolutionItems) = preProject
 		app.py = app.py
 		ml_api.py = ml_api.py
@@ -20,7 +20,7 @@ Project("{66A26720-8FB5-11D2-AA7E-00C04F688DDE}") = "Python AI and RAG", "Python
 		ai_crm\service.py = ai_crm\service.py
 	EndProjectSection
 EndProject
-Project("{66A26720-8FB5-11D2-AA7E-00C04F688DDE}") = "Research and knowledge base", "Research and knowledge base", "{5E155C80-E778-4B30-AC8A-AE4A1BB78D29}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Research and knowledge base", "Research and knowledge base", "{5E155C80-E778-4B30-AC8A-AE4A1BB78D29}"
 	ProjectSection(SolutionItems) = preProject
 		research\methodology.md = research\methodology.md
 		research\retrieval_eval.jsonl = research\retrieval_eval.jsonl
