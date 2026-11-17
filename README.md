@@ -4,25 +4,28 @@ An AI R&D prototype for turning relational CRM data into customer segments, pred
 
 The ASP.NET Core API is the CRM-facing adapter. Python owns the machine-learning and RAG workflows. A Streamlit app makes the research visible and lets a CRM owner inspect evidence before acting.
 
+**Implementation status:** the CRM API now has Identity authentication, organization-scoped SQLite persistence, customer CRUD, audit events, and a tenant-scoped K-Means segmentation request. The Python segmentation API receives only minimized feature rows for the authenticated organization. Churn and repeat-purchase probabilities are intentionally marked unavailable until historical feature snapshots and future labels can be aligned and evaluated. The standalone Streamlit research lab still uses clearly labeled synthetic demo data.
+
 > The included customer data and future labels are generated for demonstration. They contain no names, emails, phone numbers or payment details. Do not treat sample model metrics as business results.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    A[Customers / transactions / activity / interactions] --> B[Grain checks + customer-level feature engineering]
-    B --> C[RFM + behavioral features]
-    C --> D[K-means segments]
-    C --> E[Churn + repeat-purchase models]
-    D --> F[Customer context]
-    E --> F
-    G[CRM playbooks and policy docs] --> H[BM25 + dense retrieval]
-    H --> I[RRF fusion]
-    I --> J[Cross-encoder reranker]
-    F --> K[LLM decision-support prompt]
-    J --> K
-    K --> L[Cited recommendation + uncertainty]
-    L --> M[Streamlit review UI / ASP.NET controllers]
+    U[Authenticated user + organization claims] --> A[ASP.NET authorization and tenant scope]
+    A --> DB[(SQLite: customers, transactions, activity, interactions)]
+    DB --> B[Aggregate authorized rows to customer-level features]
+    B -->|IDs + numeric aggregates; no contact fields| C[Python AI service]
+    C --> D[RFM + behavioral features]
+    D --> E[K-means segments]
+    D --> F[Churn + repeat-purchase models]
+    C --> G[ASP.NET response to the same authorized user]
+    H[CRM playbooks and policy docs] --> I[BM25 + dense retrieval]
+    I --> J[RRF fusion]
+    J --> K[Cross-encoder reranker]
+    G --> L[LLM decision-support prompt]
+    K --> L
+    L --> M[Cited recommendation + uncertainty]
     M --> N[Human review before a CRM action]
 ```
 
@@ -40,7 +43,9 @@ flowchart LR
 |---|---|
 | `AI_Customer_Intelligence.slnx` | Open this solution in Visual Studio 2026 |
 | `src/Crm.Api/Controllers/` | CRM endpoints for customers, insights and the assistant |
-| `src/Crm.Api/Services/` | CSV profile repository and Python AI-service client |
+| `src/Crm.Api/Data/` | EF Core database context and tenant-scoped migrations |
+| `src/Crm.Api/Models/` | Organization, user, customer, transaction and activity entities/DTOs |
+| `src/Crm.Api/Services/` | Tenant context, audit events, feature aggregation and Python AI-service client |
 | `ai_crm/` | Feature engineering, models, retrieval and LLM orchestration |
 | `knowledge_base/` | Small CRM playbooks indexed by the RAG pipeline |
 | `research/` | Retrieval and answer evaluation sets and methodology |
@@ -49,10 +54,12 @@ flowchart LR
 | `app.py` | Streamlit customer intelligence and RAG research UI |
 | `ml_api.py` | FastAPI scoring and RAG service |
 | `sql/schema.sql` | SQL Server schema reference for the relational grain |
+| `tests/Crm.Api.Tests/` | API integration tests for registration, role scope, CRUD and tenant isolation |
+| `tests/python/` | Python unit tests for the tenant segmentation pipeline |
 
 ## Run locally on Windows
 
-### 1. Generate the sample CRM
+### 1. Generate optional research demo data
 
 From the project root:
 
@@ -60,7 +67,7 @@ From the project root:
 python scripts/generate_demo_data.py
 ```
 
-This creates 1,500 synthetic customers plus separate transaction, interaction, activity and future-outcome tables in `data/demo/`.
+This creates 1,500 synthetic customers plus separate transaction, interaction, activity and future-outcome tables in `data/demo/`. The files power the standalone research lab and do not populate the authenticated CRM database.
 
 ### 2. Create the Python environment
 
@@ -104,7 +111,7 @@ streamlit run app.py
 
 The dashboard has an overview, a scored customer book with a CSV review queue, a cited RAG assistant, a retrieval research lab and an architecture/data-quality view.
 
-### 6. Open the CRM API in Visual Studio
+### 6. Open and start the CRM API in Visual Studio
 
 Open `AI_Customer_Intelligence.slnx` from this folder in Visual Studio. The CRM-facing ASP.NET Core adapter targets .NET 10 LTS. Then run `Crm.Api` with terminal 3:
 
@@ -112,30 +119,55 @@ Open `AI_Customer_Intelligence.slnx` from this folder in Visual Studio. The CRM-
 dotnet run --project src/Crm.Api
 ```
 
-The ASP.NET API expects the Python service at `http://127.0.0.1:8000/`. Change `PythonService:BaseUrl` in `src/Crm.Api/appsettings.json` if the service runs elsewhere.
+The ASP.NET API expects the Python service at `http://127.0.0.1:8000/`. Change `PythonService:BaseUrl` in `src/Crm.Api/appsettings.json` if the service runs elsewhere. On its first start, EF Core applies the checked-in migrations to `src/Crm.Api/App_Data/ai-crm.db` and seeds the Admin, Manager, and Sales Executive roles. The local database and protected cookie keys are ignored by Git.
+
+Create the first organization and Admin account with `POST /api/auth/register`:
+
+```json
+{
+  "organizationName": "Example CRM",
+  "displayName": "CRM Administrator",
+  "email": "admin@example.com",
+  "password": "Use-A-Long-Unique-Password!"
+}
+```
+
+Registration signs the new user in with an HTTP-only session cookie. For browser/API clients, first call `GET /api/auth/csrf`, then send the returned token in the `X-CSRF-TOKEN` header for POST, PUT, PATCH, and DELETE requests. Password reset tokens are sent through configured SMTP in non-development environments; local development writes the one-time token to the API log.
+
+The current Streamlit app is a separate synthetic-data research demo. It is not yet the CRM frontend and does not share the ASP.NET login session.
 
 ## API routes
 
 | Method | Route | Purpose |
 |---|---|---|
 | `GET` | `/health` | ASP.NET API health |
-| `GET` | `/api/customers?clusters=4` | Customer profiles with segment and scores |
-| `GET` | `/api/customers/{customerId}?clusters=4` | Customer 360 row |
-| `GET` | `/api/insights?clusters=4` | Segment sizes and held-out model metrics |
-| `GET` | `/api/insights/follow-ups?threshold=0.65` | Candidate human review queue |
-| `POST` | `/api/assistant/recommendations` | RAG response for a customer and question |
+| `POST` | `/api/auth/register` | Create an organization and its first Admin account |
+| `POST` | `/api/auth/login` | Start a cookie session |
+| `POST` | `/api/auth/logout` | End the current cookie session |
+| `GET` | `/api/auth/me` | Current user and organization |
+| `GET` | `/api/auth/csrf` | CSRF token for authenticated write requests |
+| `GET` | `/api/customers` | Tenant-scoped search, sort and paginated customer list |
+| `POST` | `/api/customers` | Create a tenant-scoped customer |
+| `GET` | `/api/customers/{customerId}` | Customer profile with transaction, interaction, note and follow-up history |
+| `PUT` | `/api/customers/{customerId}` | Update a customer |
+| `DELETE` | `/api/customers/{customerId}` | Archive a customer (Admin/Manager only) |
+| `GET` | `/api/insights` | Real tenant data counts and model availability/label status |
+| `GET` | `/api/insights/segmentation?clusters=4` | Run K-Means on actual customer records; synthetic rows are excluded by default |
+| `GET` | `/api/insights/follow-ups?daysAhead=7` | Actual open follow-up records due now or in the requested window |
+| `POST` | `/api/assistant/recommendations` | RAG response using the authorized customer’s minimized CRM aggregates |
+| `GET` | `/api/users` | Organization users (Admin only) |
+| `POST` | `/api/users` | Create a Manager or Sales Executive (Admin only) |
 
 Example assistant request:
 
 ```json
 {
-  "customerId": "C00042",
-  "question": "What should the CRM owner review before choosing a next action?",
-  "clusters": 4
+  "customerId": "e1d34df8-8b20-4cb4-b92d-5f8c5cb3f3fc",
+  "question": "What should the CRM owner review before choosing a next action?"
 }
 ```
 
-Python service routes are `GET /health`, `GET /customers`, `GET /metrics` and `POST /assistant/recommendations`.
+Python service routes include the standalone synthetic-data demo routes `GET /customers` and `GET /metrics`, the CRM API route `POST /segmentation`, and tenant-context RAG route `POST /assistant/tenant-recommendations`. The ASP.NET API authorizes and aggregates records before calling these tenant-context endpoints. It never asks Python to look up a customer by an unscoped identifier.
 
 ## AI research plan
 
@@ -173,7 +205,7 @@ This records response latency, retrieved-source recall and citation-ID validity.
 ## Limits and next research steps
 
 - Synthetic labels are generated from observable feature patterns. This can make the learning problem easier than real churn and conversion work.
-- The classifiers use a stratified random holdout to keep this demo compact. Replace it with time-based validation on historical snapshots before drawing conclusions.
+- The standalone demo classifiers use synthetic labels and a stratified random holdout. Replace it with time-based validation on historical snapshots before drawing conclusions. The authenticated CRM API does not expose those demo scores as real customer risk.
 - Logistic regression scores are ranking aids; calibrate probabilities and select operating thresholds against real campaign costs.
 - Segment labels are derived from cluster profiles for readability. Review each cluster's feature distributions before using the label.
 - Add production connectors only after a data contract, consent model, access control and retention policy are defined.

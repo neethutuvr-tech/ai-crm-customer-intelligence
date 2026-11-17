@@ -1,7 +1,8 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Crm.Api.Models;
 
 public sealed record AssistantRequestDto(
-    string CustomerId,
-    string Question,
-    int Clusters = 4);
+    [property: Required, StringLength(36, MinimumLength = 32)] string CustomerId,
+    [property: Required, StringLength(800, MinimumLength = 5)] string Question);
 

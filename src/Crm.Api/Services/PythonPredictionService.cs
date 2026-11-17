@@ -6,18 +6,15 @@ namespace Crm.Api.Services;
 
 public sealed class PythonPredictionService(HttpClient httpClient) : IPredictionService
 {
-    public async Task<IReadOnlyList<ScoredCustomerDto>> GetCustomersAsync(
+    public async Task<JsonElement> GetSegmentationAsync(
+        IReadOnlyList<CustomerFeatureDto> customers,
         int clusters,
         CancellationToken cancellationToken)
     {
-        return await httpClient.GetFromJsonAsync<List<ScoredCustomerDto>>(
-                   $"customers?clusters={clusters}", cancellationToken)
-               ?? [];
-    }
-
-    public async Task<JsonElement> GetMetricsAsync(int clusters, CancellationToken cancellationToken)
-    {
-        using var response = await httpClient.GetAsync($"metrics?clusters={clusters}", cancellationToken);
+        using var response = await httpClient.PostAsJsonAsync(
+            "segmentation",
+            new { customers, clusters },
+            cancellationToken);
         response.EnsureSuccessStatusCode();
         using var document = await JsonDocument.ParseAsync(
             await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
@@ -25,12 +22,13 @@ public sealed class PythonPredictionService(HttpClient httpClient) : IPrediction
     }
 
     public async Task<JsonElement> GetRecommendationAsync(
-        AssistantRequestDto request,
+        string question,
+        CustomerAssistantContext customerContext,
         CancellationToken cancellationToken)
     {
         using var response = await httpClient.PostAsJsonAsync(
-            "assistant/recommendations",
-            new { customer_id = request.CustomerId, question = request.Question, clusters = request.Clusters },
+            "assistant/tenant-recommendations",
+            new { question, customer_context = customerContext },
             cancellationToken);
         response.EnsureSuccessStatusCode();
         using var document = await JsonDocument.ParseAsync(

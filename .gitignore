@@ -4,10 +4,12 @@ venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+TestResults/
 .streamlit/secrets.toml
 research/retrieval_benchmark_results.csv
 research/rag_benchmark_results.csv
 data/index/
+src/Crm.Api/App_Data/
 *.joblib
 *.pkl
 bin/

@@ -5,8 +5,14 @@ namespace Crm.Api.Services;
 
 public interface IPredictionService
 {
-    Task<IReadOnlyList<ScoredCustomerDto>> GetCustomersAsync(int clusters, CancellationToken cancellationToken);
-    Task<JsonElement> GetMetricsAsync(int clusters, CancellationToken cancellationToken);
-    Task<JsonElement> GetRecommendationAsync(AssistantRequestDto request, CancellationToken cancellationToken);
+    Task<JsonElement> GetSegmentationAsync(
+        IReadOnlyList<CustomerFeatureDto> customers,
+        int clusters,
+        CancellationToken cancellationToken);
+
+    Task<JsonElement> GetRecommendationAsync(
+        string question,
+        CustomerAssistantContext customerContext,
+        CancellationToken cancellationToken);
 }
 

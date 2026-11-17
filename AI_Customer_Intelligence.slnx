@@ -12,6 +12,7 @@
     <File Path="ai_crm/llm.py" />
     <File Path="ai_crm/models.py" />
     <File Path="ai_crm/retrieval.py" />
+    <File Path="ai_crm/segmentation.py" />
     <File Path="ai_crm/service.py" />
     <File Path="app.py" />
     <File Path="ml_api.py" />
@@ -30,5 +31,8 @@
     <File Path="scripts/evaluate_retrieval.py" />
     <File Path="scripts/generate_demo_data.py" />
     <File Path="sql/schema.sql" />
+  </Folder>
+  <Folder Name="/Tests/">
+    <Project Path="tests/Crm.Api.Tests/Crm.Api.Tests.csproj" />
   </Folder>
 </Solution>
