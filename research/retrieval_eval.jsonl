@@ -1,0 +1,12 @@
+{"query_id":"seg-01","query":"How should we calculate RFM and interpret customer clusters?","relevant_sources":["segmentation_playbook"]}
+{"query_id":"seg-02","query":"Why aggregate transaction rows before joining a customer table?","relevant_sources":["data_quality_and_privacy","segmentation_playbook"]}
+{"query_id":"seg-03","query":"Which metrics can help assess clustering quality?","relevant_sources":["segmentation_playbook"]}
+{"query_id":"ret-01","query":"What should a salesperson check before contacting a customer with a high churn score?","relevant_sources":["retention_playbook","campaign_playbook"]}
+{"query_id":"ret-02","query":"Does a high churn probability prove that a customer will leave?","relevant_sources":["retention_playbook"]}
+{"query_id":"ret-03","query":"How should we choose and monitor a churn threshold?","relevant_sources":["retention_playbook"]}
+{"query_id":"camp-01","query":"How do we measure incremental campaign lift?","relevant_sources":["campaign_playbook"]}
+{"query_id":"camp-02","query":"What checks are required before sending a marketing offer?","relevant_sources":["campaign_playbook","retention_playbook"]}
+{"query_id":"camp-03","query":"Can purchase propensity prove that the campaign caused a sale?","relevant_sources":["campaign_playbook"]}
+{"query_id":"data-01","query":"How can future outcomes leak into model features?","relevant_sources":["data_quality_and_privacy"]}
+{"query_id":"data-02","query":"Which personal contact data is included in the sample CRM?","relevant_sources":["data_quality_and_privacy"]}
+{"query_id":"data-03","query":"What should be recorded to audit model recommendations?","relevant_sources":["data_quality_and_privacy"]}

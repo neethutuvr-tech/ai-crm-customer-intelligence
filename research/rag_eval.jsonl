@@ -1,0 +1,5 @@
+{"case_id":"rag-01","customer_id":"C00042","question":"What should a human owner review before making a retention decision?","relevant_sources":["retention_playbook","campaign_playbook"]}
+{"case_id":"rag-02","customer_id":"C00107","question":"Can this purchase score prove that an offer caused a future sale?","relevant_sources":["campaign_playbook"]}
+{"case_id":"rag-03","customer_id":"C00315","question":"What data quality checks matter before scoring this customer?","relevant_sources":["data_quality_and_privacy","segmentation_playbook"]}
+{"case_id":"rag-04","customer_id":"C00720","question":"How should the CRM team use a customer segment safely?","relevant_sources":["segmentation_playbook","campaign_playbook"]}
+{"case_id":"rag-05","customer_id":"C01240","question":"What should we check before contacting this customer with an offer?","relevant_sources":["campaign_playbook","retention_playbook"]}

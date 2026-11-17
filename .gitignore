@@ -1,0 +1,17 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.streamlit/secrets.toml
+research/retrieval_benchmark_results.csv
+research/rag_benchmark_results.csv
+data/index/
+*.joblib
+*.pkl
+bin/
+obj/
+.vs/
+*.user
+
