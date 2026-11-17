@@ -38,7 +38,7 @@ flowchart LR
 
 | Path | Purpose |
 |---|---|
-| `AI_Customer_Intelligence.sln` | Open this solution in Visual Studio |
+| `AI_Customer_Intelligence.slnx` | Open this solution in Visual Studio 2026 |
 | `src/Crm.Api/Controllers/` | CRM endpoints for customers, insights and the assistant |
 | `src/Crm.Api/Services/` | CSV profile repository and Python AI-service client |
 | `ai_crm/` | Feature engineering, models, retrieval and LLM orchestration |
@@ -106,7 +106,7 @@ The dashboard has an overview, a scored customer book with a CSV review queue, a
 
 ### 6. Open the CRM API in Visual Studio
 
-Open `AI_Customer_Intelligence.sln` from this folder in Visual Studio. Then run `Crm.Api` with terminal 3:
+Open `AI_Customer_Intelligence.slnx` from this folder in Visual Studio. The CRM-facing ASP.NET Core adapter targets .NET 10 LTS. Then run `Crm.Api` with terminal 3:
 
 ```powershell
 dotnet run --project src/Crm.Api
