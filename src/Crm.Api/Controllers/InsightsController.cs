@@ -109,6 +109,51 @@ public sealed class InsightsController(
         });
     }
 
+    [HttpGet("segmentation/research")]
+    public async Task<IActionResult> GetSegmentationResearch(
+        [FromQuery] int clusters = 4,
+        [FromQuery] bool includeSynthetic = false,
+        [FromQuery] double dbscanEps = 0.9,
+        [FromQuery] int dbscanMinSamples = 5,
+        CancellationToken cancellationToken = default)
+    {
+        if (clusters is < 2 or > 8)
+            return BadRequest(new { error = "clusters must be between 2 and 8." });
+        if (!double.IsFinite(dbscanEps) || dbscanEps is < 0.1 or > 5.0)
+            return BadRequest(new { error = "dbscanEps must be between 0.1 and 5.0." });
+        if (dbscanMinSamples is < 2 or > 50)
+            return BadRequest(new { error = "dbscanMinSamples must be between 2 and 50." });
+
+        var eligibleCustomers = database.Customers.AsNoTracking().Where(row => row.Status != "Archived");
+        if (!includeSynthetic)
+            eligibleCustomers = eligibleCustomers.Where(row => !row.IsSynthetic);
+        var eligibleCount = await eligibleCustomers.CountAsync(cancellationToken);
+        if (eligibleCount > 5_000)
+            return BadRequest(new { error = "The research comparison accepts at most 5,000 customers because hierarchical clustering is quadratic." });
+        if (eligibleCount < Math.Max(clusters + 1, dbscanMinSamples))
+            return UnprocessableEntity(new
+            {
+                error = $"The cohort must contain at least {Math.Max(clusters + 1, dbscanMinSamples)} customers for this comparison.",
+                customerCount = eligibleCount
+            });
+
+        var profiles = await profileService.GetProfilesAsync(includeSynthetic, ownerUserId: null, cancellationToken);
+        var result = await predictionService.GetSegmentationResearchAsync(
+            profiles.Select(row => row.Features).ToArray(),
+            clusters,
+            dbscanEps,
+            dbscanMinSamples,
+            cancellationToken);
+        return Ok(new
+        {
+            dataSource = "tenant_database",
+            syntheticRecordsIncluded = includeSynthetic,
+            syntheticRecordCount = profiles.Count(row => row.IsSynthetic),
+            realRecordCount = profiles.Count(row => !row.IsSynthetic),
+            result
+        });
+    }
+
     [HttpGet("follow-ups")]
     public async Task<IActionResult> GetFollowUps(
         [FromQuery] int daysAhead = 7,

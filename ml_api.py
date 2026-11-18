@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from ai_crm.llm import generate_recommendation
-from ai_crm.segmentation import analyze_customer_segments
+from ai_crm.segmentation import analyze_customer_segments, analyze_segmentation_research
 from ai_crm.service import get_customer_intelligence, get_retriever
 
 
@@ -55,6 +55,12 @@ class SegmentCustomer(BaseModel):
 class SegmentationRequest(BaseModel):
     customers: list[SegmentCustomer] = Field(min_length=3, max_length=10_000)
     clusters: int = Field(default=4, ge=2, le=8)
+
+
+class SegmentationResearchRequest(SegmentationRequest):
+    customers: list[SegmentCustomer] = Field(min_length=3, max_length=5_000)
+    dbscan_eps: float = Field(default=0.9, ge=0.1, le=5.0)
+    dbscan_min_samples: int = Field(default=5, ge=2, le=50)
 
 
 class TenantRecommendationRequest(BaseModel):
@@ -109,6 +115,21 @@ def segment_tenant_customers(request: SegmentationRequest) -> dict[str, Any]:
     try:
         records = [customer.model_dump() for customer in request.customers]
         return analyze_customer_segments(records, request.clusters)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/segmentation/research")
+def compare_tenant_segmentation_methods(request: SegmentationResearchRequest) -> dict[str, Any]:
+    """Compare clustering methods over only the authorized tenant rows supplied by CRM."""
+    try:
+        records = [customer.model_dump() for customer in request.customers]
+        return analyze_segmentation_research(
+            records,
+            request.clusters,
+            request.dbscan_eps,
+            request.dbscan_min_samples,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

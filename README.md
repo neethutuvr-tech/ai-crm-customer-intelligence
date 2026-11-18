@@ -4,7 +4,7 @@ An AI R&D prototype for turning relational CRM data into customer segments, pred
 
 The ASP.NET Core API is the CRM-facing adapter. Python owns the machine-learning and RAG workflows. A Streamlit app makes the research visible and lets a CRM owner inspect evidence before acting.
 
-**Implementation status:** the CRM API now has Identity authentication, organization-scoped SQLite persistence, customer CRUD, validated CSV import, lead management and conversion, customer transactions/interactions/notes/follow-ups, audit events, and a tenant-scoped K-Means segmentation request. The Python segmentation API receives only minimized feature rows for the authenticated organization. Churn and repeat-purchase probabilities are intentionally marked unavailable until historical feature snapshots and future labels can be aligned and evaluated. Excel import and the authenticated CRM frontend remain future milestones. The standalone Streamlit research lab still uses clearly labeled synthetic demo data.
+**Implementation status:** the CRM API now has Identity authentication, organization-scoped SQLite persistence, customer CRUD, validated CSV import, lead management and conversion, customer transactions/interactions/notes/follow-ups, audit events, tenant-scoped K-Means segmentation, and a research benchmark comparing K-Means, hierarchical clustering, and DBSCAN. The Python AI service receives only minimized feature rows for the authenticated organization. Churn and repeat-purchase probabilities are intentionally marked unavailable until historical feature snapshots and future labels can be aligned and evaluated. Excel import and the authenticated CRM frontend remain future milestones. The standalone Streamlit research lab still uses clearly labeled synthetic demo data.
 
 > The included customer data and future labels are generated for demonstration. They contain no names, emails, phone numbers or payment details. Do not treat sample model metrics as business results.
 
@@ -163,6 +163,7 @@ The current Streamlit app is a separate synthetic-data research demo. It is not 
 | `POST` | `/api/leads/{leadId}/convert` | Convert a lead into a customer once |
 | `GET` | `/api/insights` | Real tenant data counts and model availability/label status |
 | `GET` | `/api/insights/segmentation?clusters=4` | Run K-Means on actual customer records; synthetic rows are excluded by default |
+| `GET` | `/api/insights/segmentation/research?clusters=4` | Compare K-Means, Ward hierarchical clustering, and DBSCAN on the same authorized cohort |
 | `GET` | `/api/insights/follow-ups?daysAhead=7` | Actual open follow-up records due now or in the requested window |
 | `POST` | `/api/assistant/recommendations` | RAG response using the authorized customer’s minimized CRM aggregates |
 | `GET` | `/api/users` | Organization users (Admin only) |
@@ -179,7 +180,7 @@ Example assistant request:
 }
 ```
 
-Python service routes include the standalone synthetic-data demo routes `GET /customers` and `GET /metrics`, the CRM API route `POST /segmentation`, and tenant-context RAG route `POST /assistant/tenant-recommendations`. The ASP.NET API authorizes and aggregates records before calling these tenant-context endpoints. It never asks Python to look up a customer by an unscoped identifier.
+Python service routes include the standalone synthetic-data demo routes `GET /customers` and `GET /metrics`, the CRM API routes `POST /segmentation` and `POST /segmentation/research`, and the tenant-context RAG route `POST /assistant/tenant-recommendations`. The ASP.NET API authorizes and aggregates records before calling these tenant-context endpoints. It never asks Python to look up a customer by an unscoped identifier.
 
 ## AI research plan
 
@@ -188,6 +189,8 @@ Python service routes include the standalone synthetic-data demo routes `GET /cu
 **Baselines:** BM25, dense semantic retrieval, BM25+dense with RRF, and RRF followed by a CrossEncoder.
 
 **Metrics:** Recall@5 (whether useful evidence reaches the model), MRR@5 (rank of the first relevant source), and NDCG@5 (ranking quality across relevant sources). The curated query set is in `research/retrieval_eval.jsonl`.
+
+For tenant segmentation, `GET /api/insights/segmentation/research` fits K-Means, Ward hierarchical clustering and DBSCAN to one authorized tenant cohort using the same transformed feature matrix. The research comparison is capped at 5,000 customers because hierarchical clustering has quadratic memory/time behavior. The response includes per-customer memberships, mean-feature profiles, a shared PCA projection, K-Means elbow values, silhouette scores, DBSCAN noise counts, fit latency and reproducibility parameters. Silhouette excludes DBSCAN noise and is `null` when it cannot be measured. These are descriptive cluster diagnostics, not predictive performance or evidence that a segment label is a ground-truth customer category. Tune `dbscanEps` and `dbscanMinSamples` on a development cohort and document those settings before comparing runs.
 
 Run the retrieval benchmark:
 

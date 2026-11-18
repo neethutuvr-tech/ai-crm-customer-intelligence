@@ -191,6 +191,12 @@ public sealed class CrmApiFlowTests
         Assert.AreEqual("not_evaluated", insights.GetProperty("churnModel").GetProperty("status").GetString());
         var insufficientSegmentation = await admin.GetAsync("/api/insights/segmentation?clusters=2");
         Assert.AreEqual(HttpStatusCode.UnprocessableEntity, insufficientSegmentation.StatusCode);
+        var insufficientResearchCohort = await admin.GetAsync(
+            "/api/insights/segmentation/research?clusters=2&dbscanMinSamples=5");
+        Assert.AreEqual(HttpStatusCode.UnprocessableEntity, insufficientResearchCohort.StatusCode);
+        var invalidResearchParameters = await admin.GetAsync(
+            "/api/insights/segmentation/research?clusters=2&dbscanMinSamples=1");
+        Assert.AreEqual(HttpStatusCode.BadRequest, invalidResearchParameters.StatusCode);
 
         var duplicate = await admin.PostAsJsonAsync("/api/customers", new
         {

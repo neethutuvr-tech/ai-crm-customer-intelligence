@@ -10,6 +10,13 @@ public interface IPredictionService
         int clusters,
         CancellationToken cancellationToken);
 
+    Task<JsonElement> GetSegmentationResearchAsync(
+        IReadOnlyList<CustomerFeatureDto> customers,
+        int clusters,
+        double dbscanEps,
+        int dbscanMinSamples,
+        CancellationToken cancellationToken);
+
     Task<JsonElement> GetRecommendationAsync(
         string question,
         CustomerAssistantContext customerContext,

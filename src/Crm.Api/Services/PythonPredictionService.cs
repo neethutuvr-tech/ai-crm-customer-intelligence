@@ -21,6 +21,23 @@ public sealed class PythonPredictionService(HttpClient httpClient) : IPrediction
         return document.RootElement.Clone();
     }
 
+    public async Task<JsonElement> GetSegmentationResearchAsync(
+        IReadOnlyList<CustomerFeatureDto> customers,
+        int clusters,
+        double dbscanEps,
+        int dbscanMinSamples,
+        CancellationToken cancellationToken)
+    {
+        using var response = await httpClient.PostAsJsonAsync(
+            "segmentation/research",
+            new { customers, clusters, dbscan_eps = dbscanEps, dbscan_min_samples = dbscanMinSamples },
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+        using var document = await JsonDocument.ParseAsync(
+            await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
+        return document.RootElement.Clone();
+    }
+
     public async Task<JsonElement> GetRecommendationAsync(
         string question,
         CustomerAssistantContext customerContext,
