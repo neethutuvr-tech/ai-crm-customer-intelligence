@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -10,6 +11,131 @@ namespace Crm.Api.Tests;
 [DoNotParallelize]
 public sealed class CrmApiFlowTests
 {
+    [TestMethod]
+    public async Task CustomerTransactionsInteractionsAndFollowUpsPersist()
+    {
+        using var factory = new CrmApiFactory();
+        using var admin = factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = true });
+        await RegisterAdminAsync(admin, "activity");
+        admin.DefaultRequestHeaders.Add("X-CSRF-TOKEN", await GetCsrfTokenAsync(admin));
+
+        var customerResponse = await admin.PostAsJsonAsync("/api/customers", new { name = "Activity Customer" });
+        Assert.AreEqual(HttpStatusCode.Created, customerResponse.StatusCode);
+        var customer = await customerResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var customerId = customer.GetProperty("id").GetGuid();
+
+        var transaction = await admin.PostAsJsonAsync($"/api/customers/{customerId}/transactions", new
+        {
+            externalTransactionId = $"ORDER-{Guid.NewGuid():N}",
+            orderDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-4)),
+            amount = 82.50m,
+            category = "Renewal"
+        });
+        Assert.AreEqual(HttpStatusCode.Created, transaction.StatusCode);
+
+        var interaction = await admin.PostAsJsonAsync($"/api/customers/{customerId}/interactions", new
+        {
+            type = "support_case",
+            summary = "Customer asked about account setup.",
+            outcome = "Guidance sent"
+        });
+        Assert.AreEqual(HttpStatusCode.Created, interaction.StatusCode);
+
+        var followUp = await admin.PostAsJsonAsync($"/api/customers/{customerId}/follow-ups", new
+        {
+            subject = "Call about renewal",
+            dueAtUtc = DateTimeOffset.UtcNow.AddDays(2)
+        });
+        Assert.AreEqual(HttpStatusCode.Created, followUp.StatusCode);
+        var followUpJson = await followUp.Content.ReadFromJsonAsync<JsonElement>();
+        var followUpId = followUpJson.GetProperty("id").GetGuid();
+
+        var complete = await admin.PatchAsync($"/api/customers/{customerId}/follow-ups/{followUpId}/complete", null);
+        Assert.AreEqual(HttpStatusCode.OK, complete.StatusCode);
+
+        var note = await admin.PostAsJsonAsync($"/api/customers/{customerId}/notes", new { body = "Discussed onboarding." });
+        Assert.AreEqual(HttpStatusCode.Created, note.StatusCode);
+
+        var profile = await admin.GetFromJsonAsync<JsonElement>($"/api/customers/{customerId}");
+        Assert.AreEqual(1, profile.GetProperty("transactions").GetArrayLength());
+        Assert.AreEqual(1, profile.GetProperty("interactions").GetArrayLength());
+        Assert.AreEqual(1, profile.GetProperty("notes").GetArrayLength());
+        Assert.IsNotNull(profile.GetProperty("followUps")[0].GetProperty("completedAtUtc").GetString());
+    }
+
+    [TestMethod]
+    public async Task LeadCanBeConvertedExactlyOnceIntoCustomer()
+    {
+        using var factory = new CrmApiFactory();
+        using var admin = factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = true });
+        await RegisterAdminAsync(admin, "lead");
+        admin.DefaultRequestHeaders.Add("X-CSRF-TOKEN", await GetCsrfTokenAsync(admin));
+
+        var email = $"lead-{Guid.NewGuid():N}@example.invalid";
+        var leadResponse = await admin.PostAsJsonAsync("/api/leads", new
+        {
+            name = "Qualified Prospect",
+            email,
+            company = "Example Co",
+            source = "Referral"
+        });
+        Assert.AreEqual(HttpStatusCode.Created, leadResponse.StatusCode);
+        var lead = await leadResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var leadId = lead.GetProperty("id").GetGuid();
+
+        var conversion = await admin.PostAsync($"/api/leads/{leadId}/convert", null);
+        Assert.AreEqual(HttpStatusCode.Created, conversion.StatusCode);
+        var converted = await conversion.Content.ReadFromJsonAsync<JsonElement>();
+        var customerId = converted.GetProperty("customer").GetProperty("id").GetGuid();
+        var storedLead = await admin.GetFromJsonAsync<JsonElement>($"/api/leads/{leadId}");
+        Assert.AreEqual("Converted", storedLead.GetProperty("status").GetString());
+        Assert.AreEqual(customerId, storedLead.GetProperty("convertedCustomerId").GetGuid());
+
+        var secondConversion = await admin.PostAsync($"/api/leads/{leadId}/convert", null);
+        Assert.AreEqual(HttpStatusCode.Conflict, secondConversion.StatusCode);
+        var customers = await admin.GetFromJsonAsync<JsonElement>("/api/customers");
+        Assert.AreEqual(1, customers.GetProperty("total").GetInt32());
+    }
+
+    [TestMethod]
+    public async Task CsvImportValidatesRowsAndSkipsDuplicates()
+    {
+        using var factory = new CrmApiFactory();
+        using var admin = factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = true });
+        var email = $"import-admin-{Guid.NewGuid():N}@example.invalid";
+        var registration = await admin.PostAsJsonAsync("/api/auth/register", new
+        {
+            organizationName = "Import Test Organization",
+            displayName = "Import Administrator",
+            email,
+            password = "SecureImport!5982"
+        });
+        Assert.AreEqual(HttpStatusCode.Created, registration.StatusCode);
+        admin.DefaultRequestHeaders.Add("X-CSRF-TOKEN", await GetCsrfTokenAsync(admin));
+
+        var duplicateEmail = $"imported-{Guid.NewGuid():N}@example.invalid";
+        var csv = string.Join("\r\n", [
+            "customer_name,email,signup_date,city,external_id,status",
+            $"\"Imported, Customer\",{duplicateEmail},2026-01-15,Calicut,IMP-1,Active",
+            $"Duplicate Row,{duplicateEmail},2026-01-15,Calicut,IMP-2,Active",
+            "Bad Date,bad-date@example.invalid,15/01/2026,Calicut,IMP-3,Active"
+        ]);
+        using var multipart = new MultipartFormDataContent();
+        multipart.Add(new StringContent(csv, Encoding.UTF8, "text/csv"), "file", "customers.csv");
+
+        var response = await admin.PostAsync("/api/customers/import", multipart);
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.AreEqual(3, result.GetProperty("rowsRead").GetInt32());
+        Assert.AreEqual(1, result.GetProperty("createdCount").GetInt32());
+        Assert.AreEqual(2, result.GetProperty("skippedCount").GetInt32());
+        Assert.AreEqual(2, result.GetProperty("errorCount").GetInt32());
+
+        var customers = await admin.GetFromJsonAsync<JsonElement>("/api/customers");
+        Assert.AreEqual(1, customers.GetProperty("total").GetInt32());
+        Assert.AreEqual("Imported, Customer", customers.GetProperty("items")[0].GetProperty("name").GetString());
+    }
+
     [TestMethod]
     public async Task RegistrationCustomerCrudAndTenantRolesWorkEndToEnd()
     {
@@ -107,5 +233,17 @@ public sealed class CrmApiFlowTests
     {
         var response = await client.GetFromJsonAsync<JsonElement>("/api/auth/csrf");
         return response.GetProperty("token").GetString()!;
+    }
+
+    private static async Task RegisterAdminAsync(HttpClient admin, string prefix)
+    {
+        var response = await admin.PostAsJsonAsync("/api/auth/register", new
+        {
+            organizationName = $"{prefix} Test Organization",
+            displayName = $"{prefix} Administrator",
+            email = $"{prefix}-{Guid.NewGuid():N}@example.invalid",
+            password = "SecureWorkflow!5982"
+        });
+        Assert.AreEqual(HttpStatusCode.Created, response.StatusCode);
     }
 }

@@ -4,7 +4,7 @@ An AI R&D prototype for turning relational CRM data into customer segments, pred
 
 The ASP.NET Core API is the CRM-facing adapter. Python owns the machine-learning and RAG workflows. A Streamlit app makes the research visible and lets a CRM owner inspect evidence before acting.
 
-**Implementation status:** the CRM API now has Identity authentication, organization-scoped SQLite persistence, customer CRUD, audit events, and a tenant-scoped K-Means segmentation request. The Python segmentation API receives only minimized feature rows for the authenticated organization. Churn and repeat-purchase probabilities are intentionally marked unavailable until historical feature snapshots and future labels can be aligned and evaluated. The standalone Streamlit research lab still uses clearly labeled synthetic demo data.
+**Implementation status:** the CRM API now has Identity authentication, organization-scoped SQLite persistence, customer CRUD, validated CSV import, lead management and conversion, customer transactions/interactions/notes/follow-ups, audit events, and a tenant-scoped K-Means segmentation request. The Python segmentation API receives only minimized feature rows for the authenticated organization. Churn and repeat-purchase probabilities are intentionally marked unavailable until historical feature snapshots and future labels can be aligned and evaluated. Excel import and the authenticated CRM frontend remain future milestones. The standalone Streamlit research lab still uses clearly labeled synthetic demo data.
 
 > The included customer data and future labels are generated for demonstration. They contain no names, emails, phone numbers or payment details. Do not treat sample model metrics as business results.
 
@@ -42,7 +42,7 @@ flowchart LR
 | Path | Purpose |
 |---|---|
 | `AI_Customer_Intelligence.slnx` | Open this solution in Visual Studio 2026 |
-| `src/Crm.Api/Controllers/` | CRM endpoints for customers, insights and the assistant |
+| `src/Crm.Api/Controllers/` | CRM endpoints for customers, leads, activity history, insights and the assistant |
 | `src/Crm.Api/Data/` | EF Core database context and tenant-scoped migrations |
 | `src/Crm.Api/Models/` | Organization, user, customer, transaction and activity entities/DTOs |
 | `src/Crm.Api/Services/` | Tenant context, audit events, feature aggregation and Python AI-service client |
@@ -148,15 +148,27 @@ The current Streamlit app is a separate synthetic-data research demo. It is not 
 | `GET` | `/api/auth/csrf` | CSRF token for authenticated write requests |
 | `GET` | `/api/customers` | Tenant-scoped search, sort and paginated customer list |
 | `POST` | `/api/customers` | Create a tenant-scoped customer |
+| `POST` | `/api/customers/import` | Validate and import up to 10,000 CSV rows (10 MB max); reports duplicates and row errors |
 | `GET` | `/api/customers/{customerId}` | Customer profile with transaction, interaction, note and follow-up history |
 | `PUT` | `/api/customers/{customerId}` | Update a customer |
 | `DELETE` | `/api/customers/{customerId}` | Archive a customer (Admin/Manager only) |
+| `GET`, `POST` | `/api/customers/{customerId}/transactions` | List or add transaction history |
+| `GET`, `POST` | `/api/customers/{customerId}/interactions` | List or record a customer interaction |
+| `GET`, `POST` | `/api/customers/{customerId}/follow-ups` | List or schedule follow-ups |
+| `PATCH` | `/api/customers/{customerId}/follow-ups/{followUpId}/complete` | Complete a follow-up |
+| `POST` | `/api/customers/{customerId}/notes` | Add a customer note |
+| `GET`, `POST` | `/api/leads` | Search/list leads or create a lead |
+| `GET`, `PUT` | `/api/leads/{leadId}` | Read or update a lead |
+| `PATCH` | `/api/leads/{leadId}/status` | Update a lead status |
+| `POST` | `/api/leads/{leadId}/convert` | Convert a lead into a customer once |
 | `GET` | `/api/insights` | Real tenant data counts and model availability/label status |
 | `GET` | `/api/insights/segmentation?clusters=4` | Run K-Means on actual customer records; synthetic rows are excluded by default |
 | `GET` | `/api/insights/follow-ups?daysAhead=7` | Actual open follow-up records due now or in the requested window |
 | `POST` | `/api/assistant/recommendations` | RAG response using the authorized customer’s minimized CRM aggregates |
 | `GET` | `/api/users` | Organization users (Admin only) |
 | `POST` | `/api/users` | Create a Manager or Sales Executive (Admin only) |
+
+Customer CSV imports use a header row with `name` or `customer_name`. Optional headers are `email`, `phone`, `signup_date` (`yyyy-MM-dd`), `city`, `acquisition_channel`, `status`, and `external_id`. Invalid rows and duplicates are skipped with row-level reasons; valid rows are committed together. Excel workbooks are not accepted yet. Lead conversion is transactional and prevents converting the same lead twice. Sales Executives see only records they own, including activity and follow-up endpoints.
 
 Example assistant request:
 
@@ -194,6 +206,13 @@ python scripts/evaluate_rag.py
 ```
 
 This records response latency, retrieved-source recall and citation-ID validity. It does not automatically claim that a valid citation supports a claim; use the human rubric for that review.
+
+Run the CRM API integration tests and Python segmentation tests with:
+
+```powershell
+dotnet test tests/Crm.Api.Tests/Crm.Api.Tests.csproj
+python -m unittest discover -s tests/python -v
+```
 
 ## Current technical choices
 

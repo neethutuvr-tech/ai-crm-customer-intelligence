@@ -58,6 +58,15 @@ public sealed class CrmDbContext(
         modelBuilder.Entity<Lead>().Property(row => row.Source).HasMaxLength(60);
         modelBuilder.Entity<Lead>().Property(row => row.Status).HasMaxLength(30).IsRequired();
         modelBuilder.Entity<Lead>().HasIndex(row => new { row.OrganizationId, row.Status, row.CreatedAtUtc });
+        modelBuilder.Entity<Lead>().HasIndex(row => new { row.OrganizationId, row.Email }).IsUnique();
+        modelBuilder.Entity<Lead>().HasOne<ApplicationUser>()
+            .WithMany()
+            .HasForeignKey(row => row.OwnerUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+        modelBuilder.Entity<Lead>().HasOne<Customer>()
+            .WithMany()
+            .HasForeignKey(row => row.ConvertedCustomerId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         modelBuilder.Entity<CustomerTransaction>().Property(row => row.ExternalTransactionId).HasMaxLength(100).IsRequired();
         modelBuilder.Entity<CustomerTransaction>().Property(row => row.Amount).HasPrecision(12, 2);

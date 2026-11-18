@@ -15,7 +15,7 @@ namespace Crm.Api.Data.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "10.0.14");
+            modelBuilder.HasAnnotation("ProductVersion", "10.0.15");
 
             modelBuilder.Entity("Crm.Api.Models.ApplicationUser", b =>
                 {
@@ -521,6 +521,13 @@ namespace Crm.Api.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ConvertedCustomerId");
+
+                    b.HasIndex("OwnerUserId");
+
+                    b.HasIndex("OrganizationId", "Email")
+                        .IsUnique();
+
                     b.HasIndex("OrganizationId", "Status", "CreatedAtUtc");
 
                     b.ToTable("Leads");
@@ -752,6 +759,19 @@ namespace Crm.Api.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Customer");
+                });
+
+            modelBuilder.Entity("Crm.Api.Models.Lead", b =>
+                {
+                    b.HasOne("Crm.Api.Models.Customer", null)
+                        .WithMany()
+                        .HasForeignKey("ConvertedCustomerId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Crm.Api.Models.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
