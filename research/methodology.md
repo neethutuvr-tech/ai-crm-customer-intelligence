@@ -28,7 +28,9 @@ Report citation validity separately from citation usefulness. A citation ID can 
 
 ## Predictive modeling
 
-The demo predicts `churn_next_30d` and `purchase_next_30d` from features available at a fixed snapshot date. A stratified holdout demonstrates metrics and is not a deployment validation design. Production research should split by time, compare a simple baseline, measure calibration and evaluate threshold trade-offs under class imbalance.
+The demo predicts `churn_next_30d` and `purchase_next_30d` from features available at one fixed synthetic snapshot. Compare class-weighted logistic regression with a class-weighted random forest. Split 75/25 by customer using stratification; tune neither model on the holdout. Fit missing-value handling, scaling and three-fold sigmoid calibration inside the training split. Report ROC-AUC, average precision (PR-AUC), precision, recall and F1 at 0.5, confusion matrix, Brier score and calibration bins. Feature importance is descriptive and is not a causal explanation. XGBoost is not included in the dependency-light baseline.
+
+This random split demonstrates the pipeline only. The generator has one snapshot per customer and draws labels from synthetic behavior rules, so it cannot support temporal validation or real business-performance claims. Production research needs multiple historical snapshots, future outcome windows, a time-based train/validation/test split, drift checks, threshold trade-offs under campaign costs and calibration against observed outcomes.
 
 The data generator creates labels from synthetic behavioral patterns. Treat the resulting ROC-AUC, precision, recall and F1 values as pipeline demonstrations only.
 

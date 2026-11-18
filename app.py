@@ -105,8 +105,8 @@ with tabs[0]:
         with col:
             st.metric(title, f"{score_metrics['roc_auc']:.3f}")
             st.caption(
-                f"Precision {score_metrics['precision_at_0_5']:.2f} · Recall {score_metrics['recall_at_0_5']:.2f} · "
-                f"F1 {score_metrics['f1_at_0_5']:.2f} · Positive rate {score_metrics['positive_rate']:.1%}"
+                f"Selected {score_metrics['selected_model']} · PR-AUC {score_metrics['pr_auc']:.3f} · "
+                f"Brier {score_metrics['brier_score']:.3f} · Positive rate {score_metrics['positive_rate']:.1%}"
             )
 
 with tabs[1]:
@@ -131,7 +131,7 @@ with tabs[1]:
         "churn_probability", "purchase_probability", "recommended_action",
     ]
     st.dataframe(
-        view[display_columns].sort_values("priority_score", ascending=False),
+        view.sort_values("priority_score", ascending=False)[display_columns],
         use_container_width=True,
         hide_index=True,
         column_config={
@@ -191,6 +191,72 @@ with tabs[2]:
             st.error(f"The RAG assistant could not complete this request: {exc}")
 
 with tabs[3]:
+    st.subheader("Supervised outcome baselines")
+    st.warning("These comparisons use generated labels and are demonstrations, not real customer risk measurements.")
+    for score_name, title in [
+        ("churn_probability", "Churn in the next 30 days"),
+        ("purchase_probability", "Repeat purchase in the next 30 days"),
+    ]:
+        evaluation = model_metrics[score_name]
+        st.markdown(f"**{title}**")
+        comparison_rows = [
+            {
+                "Model": model_name.replace("_", " ").title(),
+                "ROC-AUC": result["roc_auc"],
+                "PR-AUC": result["pr_auc"],
+                "Precision @ 0.5": result["precision_at_0_5"],
+                "Recall @ 0.5": result["recall_at_0_5"],
+                "F1 @ 0.5": result["f1_at_0_5"],
+                "Brier score": result["brier_score"],
+            }
+            for model_name, result in evaluation["models"].items()
+        ]
+        st.dataframe(pd.DataFrame(comparison_rows), use_container_width=True, hide_index=True)
+        model_choice = st.selectbox(
+            f"Inspect {title} model diagnostics",
+            list(evaluation["models"]),
+            format_func=lambda value: value.replace("_", " ").title(),
+            key=f"diagnostic_{score_name}",
+        )
+        model_result = evaluation["models"][model_choice]
+        diagnostic_left, diagnostic_right = st.columns(2)
+        with diagnostic_left:
+            st.caption(f"Holdout confusion matrix at threshold {model_result['threshold']:.2f}")
+            st.dataframe(
+                pd.DataFrame(
+                    model_result["confusion_matrix_at_0_5"],
+                    index=["Observed no", "Observed yes"],
+                    columns=["Predicted no", "Predicted yes"],
+                ),
+                use_container_width=True,
+            )
+        with diagnostic_right:
+            calibration = pd.DataFrame(model_result["calibration_curve"])
+            chart = px.line(
+                calibration,
+                x="mean_predicted_probability",
+                y="observed_positive_rate",
+                markers=True,
+                labels={
+                    "mean_predicted_probability": "Mean predicted probability",
+                    "observed_positive_rate": "Observed positive rate",
+                },
+                title="Holdout calibration",
+            )
+            chart.add_shape(type="line", x0=0, y0=0, x1=1, y1=1, line={"dash": "dash", "color": "gray"})
+            st.plotly_chart(chart, use_container_width=True)
+        importance = pd.DataFrame(evaluation["feature_importance"][model_choice])
+        st.caption("Feature importance is descriptive association, not a causal explanation.")
+        st.plotly_chart(
+            px.bar(importance, x="importance", y="feature", orientation="h", title="Training-fold feature importance"),
+            use_container_width=True,
+        )
+    st.caption(
+        f"Split: {model_metrics['churn_probability']['split_strategy']} · "
+        "Sigmoid calibration uses training folds only. XGBoost is not included in this dependency-light baseline."
+    )
+
+    st.divider()
     st.subheader("RAG research lab")
     st.markdown("Compare lexical retrieval, dense semantic search, reciprocal-rank fusion and hybrid retrieval with a cross-encoder reranker.")
     st.markdown(
