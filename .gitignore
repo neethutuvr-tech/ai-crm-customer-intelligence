@@ -9,6 +9,7 @@ TestResults/
 research/retrieval_benchmark_results.csv
 research/rag_benchmark_results.csv
 data/index/
+knowledge_base/private/
 src/Crm.Api/App_Data/
 *.joblib
 *.pkl

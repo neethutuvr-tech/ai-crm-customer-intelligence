@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from ai_crm.llm import generate_recommendation
 from ai_crm.segmentation import analyze_customer_segments, analyze_segmentation_research
-from ai_crm.service import get_customer_intelligence, get_retriever
+from ai_crm.service import get_customer_intelligence, get_retriever, reindex_retriever
 
 
 app = FastAPI(
@@ -132,6 +132,22 @@ def compare_tenant_segmentation_methods(request: SegmentationResearchRequest) ->
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.get("/knowledge/status")
+def knowledge_status() -> dict[str, Any]:
+    try:
+        return get_retriever().status()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Knowledge index unavailable: {exc}") from exc
+
+
+@app.post("/knowledge/reindex")
+def reindex_knowledge() -> dict[str, Any]:
+    try:
+        return reindex_retriever().status()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Knowledge index rebuild failed: {exc}") from exc
 
 
 @app.post("/assistant/recommendations")

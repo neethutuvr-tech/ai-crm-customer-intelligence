@@ -233,6 +233,8 @@ public sealed class CrmApiFlowTests
         var anonymous = factory.CreateClient();
         var anonymousResponse = await anonymous.GetAsync("/api/customers");
         Assert.AreEqual(HttpStatusCode.Unauthorized, anonymousResponse.StatusCode);
+        var anonymousKnowledgeResponse = await anonymous.GetAsync("/api/knowledge/status");
+        Assert.AreEqual(HttpStatusCode.Unauthorized, anonymousKnowledgeResponse.StatusCode);
     }
 
     private static async Task<string> GetCsrfTokenAsync(HttpClient client)

@@ -38,6 +38,24 @@ public sealed class PythonPredictionService(HttpClient httpClient) : IPrediction
         return document.RootElement.Clone();
     }
 
+    public async Task<JsonElement> GetKnowledgeStatusAsync(CancellationToken cancellationToken)
+    {
+        using var response = await httpClient.GetAsync("knowledge/status", cancellationToken);
+        response.EnsureSuccessStatusCode();
+        using var document = await JsonDocument.ParseAsync(
+            await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
+        return document.RootElement.Clone();
+    }
+
+    public async Task<JsonElement> ReindexKnowledgeAsync(CancellationToken cancellationToken)
+    {
+        using var response = await httpClient.PostAsync("knowledge/reindex", content: null, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        using var document = await JsonDocument.ParseAsync(
+            await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
+        return document.RootElement.Clone();
+    }
+
     public async Task<JsonElement> GetRecommendationAsync(
         string question,
         CustomerAssistantContext customerContext,

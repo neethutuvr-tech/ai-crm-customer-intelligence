@@ -125,7 +125,9 @@ def generate_recommendation(
         answer = _extractive_fallback(question, customer, sources)
     else:
         source_text = "\n\n".join(
-            f"[SOURCE_ID: {source.source_id}] {source.title}\n{source.text}"
+            f"[SOURCE_ID: {source.source_id}] [CHUNK_ID: {source.chunk_id}] {source.title} "
+            f"(file: {source.file_name}; pages: {', '.join(map(str, source.page_numbers)) or 'not paginated'})\n"
+            f"{source.text}"
             for source in sources
         )
         customer_context = {
@@ -232,7 +234,11 @@ def generate_recommendation(
     answer["sources"] = [
         {
             "source_id": source.source_id,
+            "chunk_id": source.chunk_id,
             "title": source.title,
+            "file_name": source.file_name,
+            "document_type": source.document_type,
+            "page_numbers": list(source.page_numbers),
             "text": source.text,
             "score": round(float(source.score), 5),
             "retrieval_method": source.retrieval_method,

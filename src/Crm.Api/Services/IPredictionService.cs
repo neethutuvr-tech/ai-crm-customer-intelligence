@@ -17,6 +17,10 @@ public interface IPredictionService
         int dbscanMinSamples,
         CancellationToken cancellationToken);
 
+    Task<JsonElement> GetKnowledgeStatusAsync(CancellationToken cancellationToken);
+
+    Task<JsonElement> ReindexKnowledgeAsync(CancellationToken cancellationToken);
+
     Task<JsonElement> GetRecommendationAsync(
         string question,
         CustomerAssistantContext customerContext,

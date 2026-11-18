@@ -2,7 +2,7 @@
 
 An AI R&D prototype for turning relational CRM data into customer segments, predictive scores and source-grounded next-action briefings. The main research feature is a hybrid RAG pipeline: BM25 keyword search + dense embeddings → reciprocal-rank fusion → cross-encoder reranking → LLM response with source IDs.
 
-The ASP.NET Core API is the CRM-facing adapter. Python owns the machine-learning and RAG workflows. A Streamlit app makes the research visible and lets a CRM owner inspect evidence before acting.
+The ASP.NET Core API is the CRM-facing adapter. Python owns the machine-learning and RAG workflows. Local Qdrant stores dense knowledge vectors on disk; BM25, reciprocal-rank fusion and an optional CrossEncoder reranker produce cited evidence. A Streamlit app makes the research visible and lets a CRM owner inspect evidence before acting.
 
 **Implementation status:** the CRM API now has Identity authentication, organization-scoped SQLite persistence, customer CRUD, validated CSV import, lead management and conversion, customer transactions/interactions/notes/follow-ups, audit events, tenant-scoped K-Means segmentation, and a research benchmark comparing K-Means, hierarchical clustering, and DBSCAN. The Python AI service receives only minimized feature rows for the authenticated organization. Churn and repeat-purchase probabilities are intentionally marked unavailable until historical feature snapshots and future labels can be aligned and evaluated. Excel import and the authenticated CRM frontend remain future milestones. The standalone Streamlit research lab still uses clearly labeled synthetic demo data.
 
@@ -20,11 +20,12 @@ flowchart LR
     D --> E[K-means segments]
     D --> F[Churn + repeat-purchase models]
     C --> G[ASP.NET response to the same authorized user]
-    H[CRM playbooks and policy docs] --> I[BM25 + dense retrieval]
-    I --> J[RRF fusion]
-    J --> K[Cross-encoder reranker]
+    H[CRM playbooks and policy docs: PDF, text, Markdown] --> I[Text extraction + overlapping chunks]
+    I --> J[BM25 + Qdrant dense retrieval]
+    J --> K[RRF fusion]
+    K --> R[Cross-encoder reranker]
     G --> L[LLM decision-support prompt]
-    K --> L
+    R --> L
     L --> M[Cited recommendation + uncertainty]
     M --> N[Human review before a CRM action]
 ```
@@ -33,7 +34,7 @@ flowchart LR
 
 1. **Feature layer:** transactions and interactions are aggregated to one row per customer before joining. That avoids duplicated customer rows and makes the time window explicit.
 2. **Predictive layer:** K-means discovers groups; separate classifiers estimate the next-30-day churn and purchase outcomes. Holdout metrics are reported separately from scores.
-3. **Retrieval layer:** BM25 catches exact terminology, dense embeddings catch paraphrases, reciprocal-rank fusion combines candidate lists, and a CrossEncoder reorders a smaller shortlist.
+3. **Retrieval layer:** PDF/text extraction records source and page metadata. BM25 catches exact terminology, persistent Qdrant vectors catch paraphrases, reciprocal-rank fusion combines candidate lists, and a CrossEncoder reorders a smaller shortlist.
 4. **Generation layer:** the LLM receives only the selected customer features and retrieved excerpts. It must return source IDs; the service drops citations that were not retrieved and exposes a citation audit.
 5. **Decision layer:** the API and dashboard surface a review queue. Sending an offer or contacting a customer stays with a human.
 
@@ -46,8 +47,8 @@ flowchart LR
 | `src/Crm.Api/Data/` | EF Core database context and tenant-scoped migrations |
 | `src/Crm.Api/Models/` | Organization, user, customer, transaction and activity entities/DTOs |
 | `src/Crm.Api/Services/` | Tenant context, audit events, feature aggregation and Python AI-service client |
-| `ai_crm/` | Feature engineering, models, retrieval and LLM orchestration |
-| `knowledge_base/` | Small CRM playbooks indexed by the RAG pipeline |
+| `ai_crm/` | Feature engineering, clustering, document ingestion, vector search, retrieval and LLM orchestration |
+| `knowledge_base/` | CRM Markdown, text and PDF sources; `private/` is ignored by Git |
 | `research/` | Retrieval and answer evaluation sets and methodology |
 | `research/architecture_walkthrough.md` | Layer-by-layer guide to trace one CRM question |
 | `scripts/` | Synthetic-data generation and evaluation commands |
@@ -79,7 +80,7 @@ pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-The first RAG request downloads the local embedding model. If enabled, it also downloads the local CrossEncoder reranker. The model weights stay in the machine's Hugging Face cache, outside this repository.
+The first RAG request downloads the local embedding model. If enabled, it also downloads the local CrossEncoder reranker. The model weights stay in the machine's Hugging Face cache, outside this repository. Dense vectors are stored in a local Qdrant collection under `data/index/qdrant/`, which is ignored by Git. To index local material, add `.md`, `.markdown`, `.txt`, or text-based `.pdf` files under `knowledge_base/` (put private policies in `knowledge_base/private/`) and call `POST /api/knowledge/reindex` as an Admin or Manager. Check sources, skipped files, and indexed chunk counts at `GET /api/knowledge/status`. Files are limited to 20 MB, PDFs to 1,000 pages, and extracted text to 2,000,000 characters per file. Scanned image-only PDFs need OCR before ingestion.
 
 ### 3. Choose LLM generation
 
@@ -164,6 +165,8 @@ The current Streamlit app is a separate synthetic-data research demo. It is not 
 | `GET` | `/api/insights` | Real tenant data counts and model availability/label status |
 | `GET` | `/api/insights/segmentation?clusters=4` | Run K-Means on actual customer records; synthetic rows are excluded by default |
 | `GET` | `/api/insights/segmentation/research?clusters=4` | Compare K-Means, Ward hierarchical clustering, and DBSCAN on the same authorized cohort |
+| `GET` | `/api/knowledge/status` | Admin/Manager view of indexed sources, warnings, models and vector-store counts |
+| `POST` | `/api/knowledge/reindex` | Admin/Manager reindex of local knowledge-base files |
 | `GET` | `/api/insights/follow-ups?daysAhead=7` | Actual open follow-up records due now or in the requested window |
 | `POST` | `/api/assistant/recommendations` | RAG response using the authorized customer’s minimized CRM aggregates |
 | `GET` | `/api/users` | Organization users (Admin only) |
@@ -180,7 +183,9 @@ Example assistant request:
 }
 ```
 
-Python service routes include the standalone synthetic-data demo routes `GET /customers` and `GET /metrics`, the CRM API routes `POST /segmentation` and `POST /segmentation/research`, and the tenant-context RAG route `POST /assistant/tenant-recommendations`. The ASP.NET API authorizes and aggregates records before calling these tenant-context endpoints. It never asks Python to look up a customer by an unscoped identifier.
+Python service routes include the standalone synthetic-data demo routes `GET /customers` and `GET /metrics`, the CRM API routes `POST /segmentation` and `POST /segmentation/research`, the tenant-context RAG route `POST /assistant/tenant-recommendations`, and local knowledge routes `GET /knowledge/status` and `POST /knowledge/reindex`. The ASP.NET API authorizes and aggregates CRM records before calling tenant-context endpoints and restricts knowledge management to Admin/Manager roles. It never asks Python to look up a customer by an unscoped identifier.
+
+Qdrant runs in embedded local mode by default and persists on disk without Docker or paid credentials. To use a self-hosted Qdrant server instead, set `QDRANT_URL` and optionally `QDRANT_API_KEY` in `.env`; do not expose the Python API or Qdrant endpoint publicly without adding service authentication and network controls. Local mode performs exact vector search and is intended for this prototype and small corpora.
 
 ## AI research plan
 

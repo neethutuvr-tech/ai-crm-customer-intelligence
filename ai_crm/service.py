@@ -26,6 +26,11 @@ def get_retriever() -> HybridRetriever:
     return HybridRetriever()
 
 
+def reindex_retriever() -> HybridRetriever:
+    get_retriever.cache_clear()
+    return get_retriever()
+
+
 def add_recommendations(scored, threshold: float = 0.65):
     result = scored.copy()
     result["recommended_action"] = [
